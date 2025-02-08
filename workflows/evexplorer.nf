@@ -8,6 +8,8 @@ include { STAR_ALIGN                } from '../modules/nf-core/star/align/main'
 include { SAMTOOLS_SORT             } from '../modules/nf-core/samtools/sort/main'
 include { SAMTOOLS_INDEX            } from '../modules/nf-core/samtools/index/main'
 include { DERFINDER                 } from '../modules/local/derfinder/main'
+include { BATCHCORRECTION           } from '../modules/local/batchcorrection/main'
+include { DGE                       } from '../modules/local/dge/main'
 include { paramsSummaryMap          } from 'plugin/nf-validation'
 include { paramsSummaryMultiqc      } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML    } from '../subworkflows/nf-core/utils_nfcore_pipeline'
@@ -101,21 +103,6 @@ ch_aligned_bam = STAR_ALIGN.out.bam
     ch_versions = ch_versions.mix(SAMTOOLS_INDEX.out.versions.first())
 
 
-// Tagging and grouping BAM files
-// ch_grouped_bam = ch_sorted_bam
-//   .map { bam -> tuple('bam', bam) }
-//    .groupTuple()
-//    .map { _, files -> files }  // Remove the key, keep the grouped files
-
-// Tagging and grouping index files
-//ch_grouped_index = ch_bam_index
-//    .map { index -> tuple('index', index) }
-//    .groupTuple()
-//    .map { _, files -> files }  // Remove the key, keep the grouped files
-
-
-
-
 
 ch_grouped_bam = ch_sorted_bam
     .map { meta, bam -> tuple([id: 'sample1', single_end: true], bam) }
@@ -126,7 +113,6 @@ ch_grouped_index = ch_bam_index
     .groupTuple()
 
 
-
  DERFINDER(
   ch_grouped_bam,
   ch_grouped_index,
@@ -134,6 +120,22 @@ ch_grouped_index = ch_bam_index
   ch_gtf_1,
   ch_gtf_2
    )
+
+
+ch_derfinder = DERFINDER.out.Rda
+
+BATCHCORRECTION (
+    ch_samplesheet,
+    ch_derfinder
+   )
+
+ ch_batch = BATCHCORRECTION.out.count_matrix
+
+DGE (
+   ch_samplesheet,
+   ch_batch
+   )
+
 
     //
     // Collate and save software versions
