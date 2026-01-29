@@ -1,0 +1,14 @@
+The references are generated using the commands given below,
+
+
+awk '/^>/ {print; c=0; next} c++<8500' custom_genome.fa > subset.fa
+
+awk '{
+  count[$1]++;
+  if (count[$1] <= 2200) print
+}' /references/Derfinder_pipeline/gencodeV38_pluspirnadb1_7_6_plusmirbase21_tRNAscan_MINT_hg38_V1.gff3 > subset.gtf1
+
+awk '{
+count[$1]++;
+if (count[$1] <= 3600) print
+}' /references/Derfinder_pipeline/homo_sapiens.GRCh38.gff3 > subset.gtf2

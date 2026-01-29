@@ -8,6 +8,7 @@ process BATCHCORRECTION {
         'community.wave.seqera.io/library/bioconductor-sva:3.54.0--6ac32dfb26a67399' }"
 
     input:
+    val(condition)
     val(batch)
     tuple val(meta), path(derfinder_obj)
 

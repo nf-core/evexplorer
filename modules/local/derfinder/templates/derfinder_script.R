@@ -24,10 +24,10 @@ chrs = readLines("chrName.txt")
 Rlen = 22
 #/New_data/Chromosome_calling/new_version/gencodeV33_pluspirnadb1_7_6_plusmirbase21_tRNAscan_MINT_hg38_V2.gff3
 #gffdata<-import.gff("/New_data/Chromosome_calling/new_version/gencodeV33_pluspirnadb1_7_6_plusmirbase21_tRNAscan_MINT_hg38_V2.gff3")
-gffdata<-import.gff("gencodeV38_pluspirnadb1_7_6_plusmirbase21_tRNAscan_MINT_hg38_V1.gff3")
+gffdata<-import.gff("subset.gtf1")
 
 #gffdata rna central
-gffdata2<-import.gff("homo_sapiens.GRCh38.gff3")
+gffdata2<-import.gff("subset.gtf2")
 names(mcols(gffdata2)) <- c("source", "type", "phase", "Name", "type.1", "databases", "ID", "source.1", "Parent", "providing_databases")
 
 #gffdata <- within(gffdata, rm(score))
@@ -48,7 +48,7 @@ Get_Annotated_Matrix<-function(chrs,cutoff, bams, Len, anno){
   
   #Create fullCoverage object for derfinder
   print("Creating Full Coverage Object...")
-  fullCov <- fullCoverage(files = bams, chrs = chrs, verbose = T, mc.cores = 16, mapqFilter=255)
+  fullCov <- fullCoverage(files = bams, chrs = chrs, verbose = T, mc.cores = 10, mapqFilter=255)
   #filteredCov <- lapply(fullCov, filterData, cutoff = cutoff)
   #save.image(file = "/mnt/acri7/tmp.RData")
   #rm(fullCov)

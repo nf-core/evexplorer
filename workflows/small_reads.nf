@@ -8,7 +8,6 @@ include { CUTADAPT                  } from '../modules/nf-core/cutadapt/main'
 include { FASTQC as FASTQC_POST_TRIM } from '../modules/nf-core/fastqc/main'
 include { MULTIQC                   } from '../modules/nf-core/multiqc/main'
 include { STAR_GENOMEGENERATE       } from '../modules/nf-core/star/genomegenerate/main'
-include { GUNZIP                    } from '../modules/nf-core/gunzip/main'
 include { STAR_ALIGN                } from '../modules/nf-core/star/align/main'
 include { SAMTOOLS_SORT             } from '../modules/nf-core/samtools/sort/main'      
 include { SAMTOOLS_INDEX            } from '../modules/nf-core/samtools/index/main'     
@@ -39,12 +38,10 @@ workflow SMALL_READS {
 
     ch_versions = Channel.empty()
     ch_multiqc_files = Channel.empty()
-    //
-    // MODULE: Run FastQC
-    //
-
-
-
+       
+       //
+       // MODULE: STAR_GENOMEGENERATE
+       //
   STAR_GENOMEGENERATE (
        ch_fasta,
          [ [:], [] ]
@@ -69,8 +66,8 @@ ch_versions = ch_versions.mix(STAR_GENOMEGENERATE.out.versions.first())
     CUTADAPT (
         ch_samplesheet
     )
- ch_trimmed_reads = CUTADAPT.out.reads
- ch_versions = ch_versions.mix(CUTADAPT.out.versions.first())
+    ch_trimmed_reads = CUTADAPT.out.reads
+    ch_versions = ch_versions.mix(CUTADAPT.out.versions.first())
 
     //
     // MODULE: Run FastQC after trimming
@@ -82,20 +79,23 @@ ch_versions = ch_versions.mix(STAR_GENOMEGENERATE.out.versions.first())
     ch_versions = ch_versions.mix(FASTQC_POST_TRIM.out.versions)
 
 
+    //
+    // MODULE: STAR_ALIGN
+    //
+    STAR_ALIGN (
+       ch_trimmed_reads,
+       ch_star_index,
+       [ [:], [] ],
+       [ [:], [] ],
+       [ [:], [] ],
+       [ [:], [] ]
+    )
 
-STAR_ALIGN (
-    ch_trimmed_reads,
-    ch_star_index,
-    [ [:], [] ],
-    [ [:], [] ],
-    [ [:], [] ],
-    [ [:], [] ]
-)
+    // Collect all BAM outputs in a single channel
+    ch_aligned_bam = STAR_ALIGN.out.bam
 
-// Collect all BAM outputs in a single channel
-ch_aligned_bam = STAR_ALIGN.out.bam
-
-// MODULE: Samtools Sort
+   
+    // MODULE: Samtools Sort
     SAMTOOLS_SORT (
         ch_aligned_bam,
         ch_fasta
@@ -105,8 +105,8 @@ ch_aligned_bam = STAR_ALIGN.out.bam
 
 
 
-// MODULE: Samtools Index
-  SAMTOOLS_INDEX (
+    // MODULE: Samtools Index
+    SAMTOOLS_INDEX (
         ch_sorted_bam
     )
     ch_bam_index = SAMTOOLS_INDEX.out.bai
@@ -114,52 +114,64 @@ ch_aligned_bam = STAR_ALIGN.out.bam
 
 
 
-ch_grouped_bam = ch_sorted_bam
+     ch_grouped_bam = ch_sorted_bam
     .map { meta, bam -> tuple([id: 'sample1', single_end: true], bam) }
     .groupTuple()
 
-ch_grouped_index = ch_bam_index
+     ch_grouped_index = ch_bam_index
     .map { meta, index -> tuple([id: 'sample1', single_end: true], index) }
     .groupTuple()
 
+     //
+     // MODULE: DERFINDER to generate counts from bam files
+     //
+     DERFINDER(
+     ch_grouped_bam,
+     ch_grouped_index,
+     ch_chr_names,
+     ch_gtf_1,
+     ch_gtf_2
+     )
 
 
-DERFINDER(
-  ch_grouped_bam,
-  ch_grouped_index,
-  ch_chr_names,
-  ch_gtf_1,
-  ch_gtf_2
-   )
 
-
-
-ch_samplesheet
+    ch_samplesheet
     .map { meta, _ -> tuple(meta.id, meta.sample_batch) }
     .collect()
     .set { ch_batch }
 
-ch_derfinder = DERFINDER.out.Rda
 
-  BATCHCORRECTION (
-      ch_batch,
-      ch_derfinder
-                 )
-
-ch_samplesheet
+    ch_samplesheet
     .map { meta, _ -> tuple(meta.id, meta.sample_batch, meta.sample_cond ) }
     .collect()
     .set { ch_condition }
 
-ch_count_matrix= BATCHCORRECTION.out.count_matrix
+    ch_derfinder = DERFINDER.out.Rda
 
-DRE (
-ch_condition,
-ch_count_matrix
-)
+     
+     //
+     // MODULE: BATCHCORRECTION
+     //
+     BATCHCORRECTION (
+      ch_condition,
+      ch_batch,
+      ch_derfinder
+                 )
+
+
+   ch_count_matrix= BATCHCORRECTION.out.count_matrix
+
     //
-    // Collate and save software versions
+    // MODULE: performing differential RNA expression
     //
+    DRE (
+    ch_condition,
+    ch_count_matrix
+    ) 
+   
+ 
+ 
+ 
     softwareVersionsToYAML(ch_versions)
         .collectFile(
             storeDir: "${params.outdir}/pipeline_info",

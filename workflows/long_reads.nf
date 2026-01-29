@@ -9,7 +9,6 @@ include { MINIMAP2_ALIGN } from '../modules/nf-core/minimap2/align/main'
 include { MINIMAP2_INDEX } from '../modules/nf-core/minimap2/index/main'
 include { FASTQC as FASTQC_POST_TRIM } from '../modules/nf-core/fastqc/main'
 include { MULTIQC                   } from '../modules/nf-core/multiqc/main'
-include { GUNZIP                    } from '../modules/nf-core/gunzip/main'
 include { STAR_ALIGN                } from '../modules/nf-core/star/align/main'
 include { SAMTOOLS_SORT             } from '../modules/nf-core/samtools/sort/main'      
 include { SAMTOOLS_INDEX            } from '../modules/nf-core/samtools/index/main'     
@@ -31,26 +30,26 @@ workflow LONG_READS {
 
     take:
     ch_samplesheet // channel: samplesheet read in from --input
-    ch_fasta
+    ch_fasta  // reference genome
     ch_gtf_1
     ch_gtf_2
-    ch_chr_names
+    ch_chr_names 
 
     main:
 
     ch_versions = Channel.empty()
     ch_multiqc_files = Channel.empty()
+    
+
+
     //
-    // MODULE: Run FastQC
+    // MODULE: Index reference genome
     //
+    MINIMAP2_INDEX ( ch_fasta )
 
 
-
-  MINIMAP2_INDEX ( ch_fasta )
-
-
-ch_minimap2_index = MINIMAP2_INDEX.out.index.collect()
-ch_versions = ch_versions.mix(MINIMAP2_INDEX.out.versions.first())
+    ch_minimap2_index = MINIMAP2_INDEX.out.index.collect()
+    ch_versions = ch_versions.mix(MINIMAP2_INDEX.out.versions.first())
 
     //
     // MODULE: Run FastQC before trimming
@@ -62,7 +61,7 @@ ch_versions = ch_versions.mix(MINIMAP2_INDEX.out.versions.first())
     ch_versions = ch_versions.mix(FASTQC_PRE_TRIM.out.versions.first())
 
     //
-    // MODULE: Run Cutadapt for trimming
+    // MODULE: Run pychopper for trimming
     //
     PYCHOPPER (
         ch_samplesheet
@@ -80,29 +79,37 @@ ch_versions = ch_versions.mix(MINIMAP2_INDEX.out.versions.first())
     ch_versions = ch_versions.mix(FASTQC_POST_TRIM.out.versions)
 
 
-MINIMAP2_ALIGN (
+    //
+    // MODULE: Aligning reads
+    //
+ MINIMAP2_ALIGN (
     ch_trimmed_reads,
     ch_minimap2_index,
      true,          // bam_format
      'bai',         // bam_index_extension
      false,         // cigar_paf_format
      true 
-)
+ )
 
 // Collect all BAM outputs in a single channel
 ch_sorted_bam = MINIMAP2_ALIGN.out.bam
 ch_bam_index  = MINIMAP2_ALIGN.out.index
 
 
+// grouping all bam files
 ch_grouped_bam = ch_sorted_bam
     .map { meta, bam -> tuple([id: 'sample1', single_end: true], bam) }
     .groupTuple()
 
+// grouping all indices together
 ch_grouped_index = ch_bam_index
     .map { meta, index -> tuple([id: 'sample1', single_end: true], index) }
     .groupTuple()
 
 
+    //
+    // MODULE: generating counts from the bam files
+    //
 DERFINDER(
   ch_grouped_bam,
   ch_grouped_index,
@@ -119,6 +126,10 @@ ch_samplesheet
 
 ch_derfinder = DERFINDER.out.Rda
 
+
+    //
+    // MODULE: applying batch correction 
+    //
   BATCHCORRECTION (
       ch_batch,
       ch_derfinder
@@ -132,10 +143,14 @@ ch_samplesheet
 ch_count_matrix= BATCHCORRECTION.out.count_matrix
 
 
+    //
+    // MODULE: performing differential RNA expression 
+    //
 DRE (
 ch_condition,
 ch_count_matrix
   )
+  
     //
     // Collate and save software versions
     //
@@ -151,6 +166,7 @@ ch_count_matrix
     //
     // MODULE: MultiQC
     //
+    
     ch_multiqc_config        = Channel.fromPath(
         "$projectDir/assets/multiqc_config.yml", checkIfExists: true)
     ch_multiqc_custom_config = params.multiqc_config ?

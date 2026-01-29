@@ -21,15 +21,16 @@ mat <- matrix(parts_condition, ncol = 3, byrow = TRUE)
 # Convert to dataframe
 condition_info <- as.data.frame(mat, stringsAsFactors = FALSE)
 
+
 # Set rownames from first column and drop that column
 rownames(condition_info) <- condition_info[[1]]
 design <- condition_info[ , -1, drop = FALSE]
 
 colnames(design) <- c("batch","condition")
 
+
 # Ensure column names of count matrix match sample names in design
 count_matrix <- count_matrix[, rownames(design)]
-
 
 
 # Convert batch and condition to factors
@@ -61,8 +62,9 @@ dge <- estimateDisp(dge, design_matrix)
 # Fit the model
 fit <- glmFit(dge, design_matrix)
 
+
 # Perform differential expression analysis
-lrt <- glmLRT(fit, coef = "conditiondiseases")  # Change as per your levels
+lrt <- glmLRT(fit, coef = "conditiondisease")  # Change as per your levels
 
 # Extract top DE genes
 top_genes <- topTags(lrt, n=50)\$table
@@ -70,7 +72,7 @@ top_genes <- topTags(lrt, n=50)\$table
 head(top_genes)
 
 # writing the results to a file
-write.csv(topTags(lrt, n = Inf)$table,"differential_rna_expression.csv",quote=F)
+write.csv(topTags(lrt, n = Inf)\$table,"differential_rna_expression.csv",quote=F)
 
 pdf("DE_analysis_plots.pdf", width = 10, height = 7)
 
